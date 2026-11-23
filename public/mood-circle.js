@@ -1,4 +1,4 @@
-import {blendCinemaColour,cinemaPose,cinemaDistance,nearestCinemaPosition,flavourProfile,flavourSplash,flavourSplashSource,flavourMediaGrade,gummyHandoff,createFlavourBackdrop,STORY_DWELL} from './flavour-cinema.js?v=f2b5910e3437';
+﻿import {blendCinemaColour,cinemaPose,cinemaDistance,nearestCinemaPosition,flavourProfile,flavourSplash,flavourSplashSource,flavourMediaGrade,gummyHandoff,createFlavourBackdrop,STORY_DWELL} from './flavour-cinema.js?v=prerollfix2-1795346200';
 import {productChapters,productOrbit,PRODUCT_ORBIT_MS,WRAPPER_TEAR_MS,WRAPPER_RESET_MS} from './product-journey.js?v=ac93c8712e95';
 import {componentCopy,productComponent} from './product-content.js?v=c73acc77c6a5';
 import {createProductSmoke} from './product-smoke.js?v=1029d0f04a5a';
@@ -21,6 +21,7 @@ function mountWheel(root,scope){
  let detailPointer=null,carton=0,cartonTween=null,foil=0,unroll=0,foilTween=null,unrollTween=null,inspectAmount=0,inspectTween=null,inspectNode=null;
  let orbitProgress=0,orbitTween=null,studyLighting=null;
  let chapters=[],chapterIndex=0,chapterBusy=false,modelPending=false,measureFrame=0,storyFrame=null;
+ let lastTravelDirection = 'next';
  const physicalBusy=()=>Boolean(inspectionTween||storyTween||poseTween||unrollTween||foilTween||inspectTween||cartonTween||orbitTween||chapterBusy);
  const wheelHeld=()=>hovered>=0&&!wheelDrag?.moved&&!manualTurn;
  function updateHover(){hovered=pointed>=0?pointed:focused;root.dataset.hoverHeld=String(wheelHeld());if(wheelHeld()&&['all','family'].includes(mode)){if(mode==='family')phaseTween=null;phaseTarget=phase;velocity=0;lastPointer=null;}invalidate();}
@@ -55,8 +56,8 @@ function mountWheel(root,scope){
   buttons.forEach((b,slot)=>{const enabled=enabledSlots.includes(slot),entry=entryFor(slot,mode!=='all'&&Boolean(family));b.disabled=!enabled;b.setAttribute('aria-hidden',String(!enabled));const first=mode==='all'?ringOrder.indexOf(ringOrder[slot])===slot:true;b.tabIndex=enabled&&first?0:-1;b.setAttribute('aria-label',`Explore ${entry.name}${entry.family==='vapes'?' vape':''}`);b.querySelector('span').textContent=entry.name;});
   focus.tabIndex=-1;assemble.hidden=rendererFailed||currentEntry?.family==='gummies';assemble.disabled=Boolean(poseTween||unrollTween||foilTween||inspectTween||cartonTween)||mode!=='detail';unrollButton.hidden=rendererFailed||currentEntry?.family!=='pre-rolls'||!opened;unrollButton.disabled=assemble.disabled;unrollButton.textContent=unroll>.5?'Roll':'Unroll';$('[data-mood-select-hint]').hidden=currentEntry?.family==='gummies'||Boolean(inspectNode);assemble.textContent=opened?'Assemble again':'Disassemble';
   pause.setAttribute('aria-pressed',String(paused||!motion()));pause.setAttribute('aria-label',paused?'Resume ambient motion':isResult||cinemaOpen?'Pause flavour motion':'Pause wheel motion');pause.disabled=!motion();pause.hidden=false;root.dataset.storyHeld=String(storyHeld||storyModelHeld||cinema.contains(document.activeElement));
-  insideButton.disabled=modelButton.disabled=modelPending;
-  insideButton.firstChild.textContent=modelPending?'Preparing 3D view…':currentEntry?.family==='gummies'?'Explore the flavour':'Look inside';
+  if(insideButton)insideButton.disabled=modelPending;if(modelButton)modelButton.disabled=modelPending;
+  if(insideButton?.firstChild)insideButton.firstChild.textContent=modelPending?'Preparing 3D viewâ€¦':currentEntry?.family==='gummies'?'Explore the flavour':'Look inside';
   $('[data-mood-gesture]').textContent=isResult||cinemaOpen?'':mode==='family'?'Drag to explore':w<700?'Drag to turn':'Move around the wheel';
   journeyUI();syncFilm();syncCinema();
  }
@@ -116,17 +117,111 @@ function mountWheel(root,scope){
   refreshParts();describeCinema();
  }
  function describeCinema(){if(!currentEntry)return;const profile=flavourProfile(currentEntry);if(!profile)return;
-  $('[data-cinema-name]').textContent=currentEntry.name;$('[data-cinema-model]').setAttribute('aria-label',`Look inside ${currentEntry.name}`);$('[data-cinema-line]').textContent=profile.line;$('[data-cinema-description]').textContent=profile.copy;$('[data-cinema-qualification]').textContent=currentEntry.qualification;
-  const vape=currentEntry.family==='vapes';
-  $('[data-cinema-name]').toggleAttribute('data-long-name',currentEntry.name.length>14);
-  const meta=$('[data-cinema-meta]');meta.hidden=vape;
-  meta.textContent=vape?'':currentEntry.family==='gummies'?'Fine sugar coating':`${currentEntry.finish} case`;
-  $('[data-cinema-inside]').firstChild.textContent=currentEntry.family==='gummies'?'Explore the flavour':'Look inside';
-  const i=members.indexOf(selected),previous=entryFor(members[(i-1+members.length)%members.length],true),next=entryFor(members[(i+1)%members.length],true);$('[data-cinema-prev-label]').textContent=previous.name;$('[data-cinema-next-label]').textContent=next.name;
-  if(cinemaDots.dataset.family!==family){cinemaDots.dataset.family=family;cinemaDots.innerHTML=members.map((slot,index)=>`<button type="button" data-cinema-index="${index}" aria-label="${entryFor(slot,true).name}" aria-current="${slot===selected?'true':'false'}"><span></span></button>`).join('');}else for(const dot of cinemaDots.querySelectorAll('button'))dot.setAttribute('aria-current',String(members[Number(dot.dataset.cinemaIndex)]===selected));
-  root.style.setProperty('--cinema-paper',profile.colour);root.style.setProperty('--cinema-ink',profile.ink);$('.mood-cinema-information').open=false;
- }
- function syncCinema(){const amount=cinemaOpen?focusAmount*(1-inspectionMix):0;root.style.setProperty('--cinema-progress',String(amount));root.style.setProperty('--cinema-dwell',String(storyElapsed/STORY_DWELL));
+    const name = (currentEntry.name || '').toUpperCase();
+
+    const leftEl = $('[data-henrietta-word-left]'), rightEl = $('[data-henrietta-word-right]');
+    if(leftEl){
+      // Render individual animated letter spans for kinetic Henrietta-style motion
+      leftEl.innerHTML = name.split('').map((char, i) => {
+        if(char === ' ') return '<span class="henrietta-space" style="display:inline-block; width:0.35em;">&nbsp;</span>';
+        return `<span class="henrietta-char" style="--char-index:${i};">${char}</span>`;
+      }).join('');
+      if(rightEl) rightEl.textContent = '';
+
+      // Scale font-size dynamically so long flavour names fit cleanly without overlapping or getting cut off
+      const len = name.length;
+      if(len > 15){ // e.g. GRANDDADDY PURPLE (17), LONDON POUND CAKE (17), PINEAPPLE EXPRESS (17)
+        leftEl.style.fontSize = 'clamp(46px, 9.8vw, 155px)';
+        leftEl.style.letterSpacing = '-0.02em';
+      } else if(len > 10){ // e.g. SOUR DIESEL (11), PINK CANDY (10), BLUE DREAM (10)
+        leftEl.style.fontSize = 'clamp(60px, 13vw, 210px)';
+        leftEl.style.letterSpacing = '-0.03em';
+      } else { // e.g. OG KUSH (7), GELATO (6), RUNTZ (5)
+        leftEl.style.fontSize = 'clamp(80px, 18vw, 280px)';
+        leftEl.style.letterSpacing = '-0.04em';
+      }
+
+     // Remove all enter and exit animation classes
+     const animClasses = [
+       'henrietta-word-enter-left', 'henrietta-word-enter-right',
+       'slide-out-left', 'slide-out-right',
+       'enter-diagonal-prev', 'enter-diagonal-next', 'exit-diagonal-prev', 'exit-diagonal-next',
+       'enter-vertical-prev', 'enter-vertical-next', 'exit-vertical-prev', 'exit-vertical-next',
+       'enter-horizontal-prev', 'enter-horizontal-next', 'exit-horizontal-prev', 'exit-horizontal-next'
+     ];
+     leftEl.classList.remove(...animClasses);
+     rightEl.classList.remove(...animClasses);
+     void leftEl.offsetWidth; // trigger reflow
+
+     // Apply entrance class matching this flavor's motion pattern (0: diagonal, 1: vertical, 2: horizontal)
+     const currentIndex = members.indexOf(selected);
+     const motionMode = ((currentIndex % 3) + 3) % 3;
+     const motionType = motionMode === 0 ? 'diagonal' : motionMode === 1 ? 'vertical' : 'horizontal';
+     const enterClass = `enter-${motionType}-${lastTravelDirection}`;
+     leftEl.classList.add(enterClass);
+     rightEl.classList.add(enterClass);
+   }
+
+   const badgeStrain = $('[data-henrietta-badge-strain]');
+   if(badgeStrain) badgeStrain.textContent = currentEntry.name;
+
+   const tagEl = $('[data-cinema-tag]');
+   if(tagEl) tagEl.textContent = currentEntry.family==='vapes'?'Vape Bar':currentEntry.family==='gummies'?'Edible':'Pre-roll';
+
+   const descEl = $('[data-cinema-description]');
+   if(descEl) descEl.textContent = profile.copy || currentEntry.description || '';
+
+   // Theme colors for Henrietta: vibrant signature color per strain
+   // Signature color matching each vape packaging and device
+   const vapeThemes = {
+     'og-kush': { bg: '#12826a', text: '#bbf1e4', badge: '#0c5c4a' }, // Deep emerald teal matching OG Kush pouch & pen
+     'grape-rush': { bg: '#7b2cbf', text: '#f1d6ff', badge: '#5a189a' }, // Deep violet purple
+     'granddaddy-purple': { bg: '#7b2cbf', text: '#f1d6ff', badge: '#5a189a' },
+     'mango-mirage': { bg: '#e89400', text: '#fff2cc', badge: '#b26e00' }, // Pineapple gold/orange
+     'pineapple-express': { bg: '#e89400', text: '#fff2cc', badge: '#b26e00' },
+     'cherry-drift': { bg: '#c2185b', text: '#fce4ec', badge: '#880e4f' }, // Candy berry pink
+     'pink-candy': { bg: '#c2185b', text: '#fce4ec', badge: '#880e4f' },
+     'blueberry-cobbler': { bg: '#1565c0', text: '#d0e6ff', badge: '#0d47a1' }, // Cobalt blue
+     'blue-dream': { bg: '#1565c0', text: '#d0e6ff', badge: '#0d47a1' },
+     'berry-blast': { bg: '#a3a817', text: '#f9fbd4', badge: '#787b0c' }, // Gold lime & berry (Runtz)
+     'runtz': { bg: '#a3a817', text: '#f9fbd4', badge: '#787b0c' },
+     'melon-wave': { bg: '#e86e42', text: '#ffe3d6', badge: '#b84d26' }, // Peach satin (Gelato)
+     'gelato': { bg: '#e86e42', text: '#ffe3d6', badge: '#b84d26' },
+     'sour-diesel': { bg: '#5b8e1f', text: '#e4f4cb', badge: '#3e6312' }, // Acid lime green
+     'london-pound-cake': { bg: '#c45187', text: '#fdeaf3', badge: '#913260' } // Rose pink
+   };
+
+   const theme = vapeThemes[currentEntry.id] || {
+     bg: profile.shade || '#e65100',
+     text: '#ffffff',
+     badge: profile.extract || '#bf360c'
+   };
+
+   root.style.setProperty('--henrietta-bg', theme.bg);
+   root.style.setProperty('--henrietta-text', theme.text);
+   root.style.setProperty('--henrietta-badge', theme.badge);
+
+   // Legacy attributes
+   $('[data-cinema-name]').textContent=currentEntry.name;
+   $('[data-cinema-model]').setAttribute('aria-label',`Look inside ${currentEntry.name}`);
+   $('[data-cinema-line]').textContent=profile.line;
+   $('[data-cinema-qualification]').textContent=currentEntry.qualification;
+
+   const i=members.indexOf(selected),previous=entryFor(members[(i-1+members.length)%members.length],true),next=entryFor(members[(i+1)%members.length],true);
+   const prevLabel=$('[data-cinema-prev-label]'),nextLabel=$('[data-cinema-next-label]');
+   if(prevLabel) prevLabel.textContent=previous.name;
+   if(nextLabel) nextLabel.textContent=next.name;
+
+   if(cinemaDots.dataset.family!==family){
+     cinemaDots.dataset.family=family;
+     cinemaDots.innerHTML=members.map((slot,index)=>`<button type="button" data-cinema-index="${index}" aria-label="${entryFor(slot,true).name}" aria-current="${slot===selected?'true':'false'}"><span></span></button>`).join('');
+   } else {
+     for(const dot of cinemaDots.querySelectorAll('button')) dot.setAttribute('aria-current',String(members[Number(dot.dataset.cinemaIndex)]===selected));
+   }
+   root.style.setProperty('--cinema-paper',theme.bg);
+   root.style.setProperty('--cinema-ink','#ffffff');
+  }
+  function syncCinema(){const amount=cinemaOpen?focusAmount*(1-inspectionMix):0;root.style.setProperty('--cinema-progress',String(amount));root.style.setProperty('--cinema-dwell',String(storyElapsed/STORY_DWELL));
   const study=cinemaOpen?focusAmount*inspectionMix:0;
   root.style.setProperty('--study-progress',String(study));
   if(studyLight.hidden===Boolean(study))studyLight.hidden=!study;
@@ -167,17 +262,63 @@ function mountWheel(root,scope){
   const destination=index===null?storyPosition+direction:nearestCinemaPosition(storyPosition,index,members.length);
   storyElapsed=0;
   if(destination===storyPosition)return;
+
+  // Determine traversal direction
+  const isNext = destination > storyPosition;
+  lastTravelDirection = isNext ? 'next' : 'prev';
+
+  // Animate giant typography slide-out in the current flavor's specific trajectory
+  const leftEl = $('[data-henrietta-word-left]'), rightEl = $('[data-henrietta-word-right]');
+  if(leftEl && rightEl){
+    const animClasses = [
+      'henrietta-word-enter-left', 'henrietta-word-enter-right',
+      'slide-out-left', 'slide-out-right',
+      'enter-diagonal-prev', 'enter-diagonal-next', 'exit-diagonal-prev', 'exit-diagonal-next',
+      'enter-vertical-prev', 'enter-vertical-next', 'exit-vertical-prev', 'exit-vertical-next',
+      'enter-horizontal-prev', 'enter-horizontal-next', 'exit-horizontal-prev', 'exit-horizontal-next'
+    ];
+    leftEl.classList.remove(...animClasses);
+    rightEl.classList.remove(...animClasses);
+    void leftEl.offsetWidth;
+
+    const currentIndex = members.indexOf(selected);
+    const motionMode = ((currentIndex % 3) + 3) % 3;
+    const motionType = motionMode === 0 ? 'diagonal' : motionMode === 1 ? 'vertical' : 'horizontal';
+    const exitClass = `exit-${motionType}-${lastTravelDirection}`;
+    leftEl.classList.add(exitClass);
+    rightEl.classList.add(exitClass);
+  }
+
   const slot=slotAt(destination),entry=entryFor(slot,true),splash=flavourSplash(entry);
-  if(splash)engine?.prepareEffect(splash);
-  if(family!=='gummies')smoke.play(flavourProfile(entry),{reverse:destination<storyPosition,gatherPair:family==='vapes'});
+  if(splash){
+   engine?.prepareEffect(splash);
+   // Preload adjacent slots in advance so gummies video/posters don't delay
+   const prevSplash=flavourSplash(entryFor(slotAt(destination-1),true));
+   const nextSplash=flavourSplash(entryFor(slotAt(destination+1),true));
+   if(prevSplash)engine?.prepareEffect(prevSplash);
+   if(nextSplash)engine?.prepareEffect(nextSplash);
+  }
+  if(family!=='gummies'&&family!=='vapes'&&family!=='pre-rolls')smoke.play(flavourProfile(entry),{reverse:destination<storyPosition,gatherPair:family==='vapes'});
   engine?.whenReady(slot).then(()=>invalidate());
-  storyTween=tween(storyPosition,destination,family==='gummies'?620:760,()=>{
+  
+  // Vape & pre-rolls delay curve for outro: typography slides out first (~160ms lead),
+  // then the items follow and smoothly settle into the destination slot
+  const vapeDelayedOutroEase = t => {
+   const delay = 0.08; // subtle lead: typography begins just a beat before the item slides
+   if (t <= delay) return 0;
+   const scaledT = Math.min(1, Math.max(0, (t - delay) / (1 - delay)));
+   return scaledT < 0.5 ? 2 * scaledT * scaledT : 1 - Math.pow(-2 * scaledT + 2, 2) / 2;
+  };
+
+  const isSnappyHandoff = family==='gummies';
+  const useDelayedOutro = family==='vapes'||family==='pre-rolls';
+  storyTween=tween(storyPosition,destination,isSnappyHandoff?420:(family==='vapes'?800:760),()=>{
    storyPosition=destination;
    root.dataset.storyChanging='false';
    route(currentEntry,{replace:true});
    prepareSelection(selected);
    ui();
-  });
+  }, useDelayedOutro?vapeDelayedOutroEase:easeInOut);
   root.dataset.storyChanging='true';
   invalidate();
  }
@@ -212,12 +353,12 @@ function mountWheel(root,scope){
   invalidate();
  }
  function lookInside(){
-  if(mode!=='story'||storyTween||modelPending)return;
+  if(modelPending)return;
   smoke.finish();storyElapsed=0;inside=true;chapterIndex=0;
   startStudyReveal();
   if(mode==='detail'&&w<=900)alignCollection();
  }
- function returnToStory(){if(!cinemaOpen||!inside||(!orbitTween&&physicalBusy()))return;alignCollection();clearInspection(()=>{setMode('returning');const travel=()=>{inspectionTween=tween(inspectionMix,0,850,()=>{inside=false;setMode('story');insideButton.focus({preventScroll:true});});invalidate();};const close=()=>{opened=false;if(pose>.001)poseTween=tween(pose,0,currentEntry.family==='pre-rolls'?1800:1100,travel);else travel();invalidate();};if(unroll>.001)unrollTween=tween(unroll,0,1200,close);else close();});}
+ function returnToStory(){if(!cinemaOpen||!inside||(!orbitTween&&physicalBusy()))return;alignCollection();clearInspection(()=>{setMode('returning');const travel=()=>{inspectionTween=tween(inspectionMix,0,850,()=>{inside=false;setMode('story');(insideButton||modelButton)?.focus({preventScroll:true});});invalidate();};const close=()=>{opened=false;if(pose>.001)poseTween=tween(pose,0,currentEntry.family==='pre-rolls'?1800:1100,travel);else travel();invalidate();};if(unroll>.001)unrollTween=tween(unroll,0,1200,close);else close();});}
  function turnBelt(direction){if(mode!=='family'||phaseTween)return;pendingSlot=-1;autoHold=0;manualTurn=true;const step=TAU/members.length,target=(Math.round(phase/step)-direction)*step;phaseTween=tween(phase,target,920,()=>{phaseTarget=phase;manualTurn=false;});invalidate();}
  function refreshParts(){if(!currentEntry)return;const f=currentEntry.family;let names=f==='vapes'?(opened?['Mouthpiece','Collar','Cartridge','DeviceHousing','Wrapper']:['DeviceHousing','Wrapper']):f==='pre-rolls'?(opened?(unroll>.99?['RollingPaper','HempFlower','Filter','StorageTube','TubeCap']:['Roll_1','StorageTube','TubeCap']):['StorageTube']):[];
   names=names.filter(name=>!engine||engine.hasPart(selected,name));
@@ -272,13 +413,19 @@ function mountWheel(root,scope){
   $('[data-mood-pick-title]').textContent=moodFamilies[family].name;$('[data-mood-pick-description]').textContent='Choose a flavour.';
   smoke.prepare();
   if(loadFamily)engine?.activate(family);
+  if(family==='gummies'&&engine){
+   members.forEach(mSlot=>{
+    const e=entryFor(mSlot,true),s=flavourSplash(e);
+    if(s)engine.prepareEffect(s);
+   });
+  }
   if(write)route();setMode('turning');say(`Turning to the ${moodFamilies[family].name.toLowerCase()} collection.`);
   const duration=instant?1:1050;phaseTarget=turnTarget(phase,slot,members);phaseTween=tween(phase,phaseTarget,duration,()=>{phaseTarget=phase;setMode('family');autoHold=pendingSlot>=0?(motion()?180:1):0;say(`${moodFamilies[family].name}. Select a product to explore.`);});familyTween=tween(familyAmount,1,instant?1:960);
  }
  function focusStory(){
   if(!focusAfterOpen||mode!=='story'||smoke.busy)return;
   focusAfterOpen=false;
-  (modelPending?$('[data-cinema-name]'):insideButton).focus({preventScroll:true});
+  (modelPending?$('[data-cinema-name]'):(insideButton||modelButton))?.focus({preventScroll:true});
  }
  function openProduct(slot,{rotate=true,write=true}={}){
   if(!members.includes(slot))return;cinemaOpen=true;inside=false;inspectionMix=0;inspectionTween=storyTween=null;storyElapsed=0;storyPosition=-phase*members.length/TAU;storyPosition=nearestCinemaPosition(storyPosition,members.indexOf(slot),members.length);const request=++token;orbitProgress=0;orbitTween=null;pendingSlot=-1;autoHold=0;selected=slot;describe(slot);rendererFailed=false;retry.hidden=true;opened=false;pose=0;carton=foil=unroll=inspectAmount=0;inspectNode=null;inspectNote.hidden=true;cartonTween=foilTween=unrollTween=inspectTween=null;orbitX=orbitY=0;hovered=-1;velocity=0;lastPointer=null;root.setAttribute('aria-busy','true');if(write)route(currentEntry);
@@ -286,20 +433,47 @@ function mountWheel(root,scope){
   smoke.prepare();
   const splash=flavourSplash(currentEntry);
   if(splash&&allowCinemaMedia()){
-   if(engine)engine.prepareEffect(splash);
+   if(engine){
+    engine.prepareEffect(splash);
+    // Preload previous and next gummies splash immediately
+    const curIdx=members.indexOf(slot);
+    if(curIdx>=0){
+     const prevEntry=entryFor(members[(curIdx-1+members.length)%members.length],true);
+     const nextEntry=entryFor(members[(curIdx+1)%members.length],true);
+     const sPrev=flavourSplash(prevEntry),sNext=flavourSplash(nextEntry);
+     if(sPrev)engine.prepareEffect(sPrev);
+     if(sNext)engine.prepareEffect(sNext);
+    }
+   }
    else splashVideo.src=flavourSplashSource(splash,w<700);
   }
   prepareSelection(slot);
   const revealStory=()=>{
    if(scope.disposed||request!==token)return;
-   if(family!=='gummies')smoke.play(flavourProfile(currentEntry),{done:focusStory});
+   // Pre-rolls use the Henrietta cinema background — no product smoke overlay needed.
+   // Smoke is only for vape-adjacent families; keeping it on pre-rolls causes smoke.busy
+   // to block shiftStory and the auto-advance loop, making the section appear frozen.
+   if(family!=='gummies'&&family!=='vapes'&&family!=='pre-rolls')smoke.play(flavourProfile(currentEntry),{done:focusStory});
+   // Lead with typography: show cinema background typography first
+   if(family==='vapes'||family==='pre-rolls'){
+     root.dataset.cinema = 'true';
+     describeCinema();
+   }
    setMode('focus');
-   focusTween=tween(focusAmount,1,730,()=>{
+   // Add a 150ms delay curve on vape & pre-roll focus zoom so background typography enters first
+   const vapeFocusDelayedEase = t => {
+     const delay = 0.08; // subtle lead: typography enters just a beat before product zooms in
+     if (t <= delay) return 0;
+     const scaledT = (t - delay) / (1 - delay);
+     return scaledT < 0.5 ? 2 * scaledT * scaledT : 1 - Math.pow(-2 * scaledT + 2, 2) / 2;
+   };
+   const useDelayedEase = family==='vapes'||family==='pre-rolls';
+   focusTween=tween(focusAmount,1,useDelayedEase?760:730,()=>{
     root.removeAttribute('aria-busy');
     setMode('story');
     say(`${currentEntry.name}. Explore the flavour and finish.`);
     focusStory();
-   });
+   }, useDelayedEase?vapeFocusDelayedEase:easeInOut);
   };
   if(rotate){
    setMode('aligning');
@@ -321,7 +495,7 @@ function mountWheel(root,scope){
  }
  function journeyUI(){
   const title=$('[data-mood-name]'),mobileHeading=$('[data-mood-mobile-heading]'),copy=$('.mood-detail__copy');if(w<=900){if(title.parentElement!==mobileHeading)mobileHeading.append(title);}else if(title.parentElement!==copy)copy.prepend(title);
-  const media=w<=900&&(!cinemaOpen||inside)&&['focus','detail','returning'].includes(mode)?$('[data-mood-route-media]'):$('.mood-circle__footer');if(pause.parentElement!==media)media.append(pause);
+  const media=w<=900&&(!cinemaOpen||inside)&&['focus','detail','returning'].includes(mode)?$('[data-mood-route-media]'):$('.mood-circle__footer-right');if(pause.parentElement!==media)media.append(pause);
   journey.hidden=!chapters.length;
   if(!currentEntry||!chapters.length)return;const busy=physicalBusy()||mode!=='detail'||rendererFailed,step=chapters[chapterIndex];root.dataset.chapter=String(chapterIndex);root.dataset.chapterBusy=String(busy);
   $('[data-journey-count]').textContent=`${chapterIndex+1} / ${chapters.length}`;$('[data-journey-mini]').textContent=`${chapterIndex+1} / ${chapters.length}`;$('[data-journey-title]').textContent=step.title;
@@ -368,7 +542,13 @@ function mountWheel(root,scope){
    label.dataset.textSide=offset+x+34+textWidth>s.width-8?'left':'right';
   });
  }
- function tick(now){frame=0;if(scope.disposed||!visible||document.hidden){last=0;return;}const reveal=smoke.frame,finite=Boolean(inspectionTween||storyTween||phaseTween||familyTween||focusTween||poseTween||foilTween||unrollTween||inspectTween||cartonTween||orbitTween),steering=Math.abs(phaseTarget-phase)>.0005||Math.abs(velocity)>.001,interval=(reveal||finite||steering||orbitDrag)?15:32;if(lastDraw&&now-lastDraw<interval){invalidate();return;}const elapsed=last?now-last:16,dt=Math.min(50,elapsed);last=lastDraw=now;if(!enginePromise)boot();
+ function tick(now){
+  frame=0;
+  const activeTween=Boolean(inspectionTween||storyTween||phaseTween||familyTween||focusTween||poseTween||foilTween||unrollTween||inspectTween||cartonTween||orbitTween);
+  if(scope.disposed||(!visible&&!activeTween)||document.hidden){last=0;return;}
+  const reveal=smoke.frame,finite=activeTween,steering=Math.abs(phaseTarget-phase)>.0005||Math.abs(velocity)>.001,interval=(reveal||finite||steering||orbitDrag)?15:32;
+  if(!storyTween&&lastDraw&&now-lastDraw<interval){invalidate();return;}
+  const elapsed=last?now-last:16,dt=Math.min(50,elapsed);last=lastDraw=now;if(!enginePromise)boot();
   if(motion()&&!paused){if(!wheelHeld()&&!smoke.busy)time+=dt/1000;if(['all','family'].includes(mode)&&!phaseTween){const next=wheelMotionStep({phase,target:phaseTarget,velocity,dt,held:wheelHeld(),coasting:now-lastSteer>100});phase=next.phase;phaseTarget=next.target;velocity=next.velocity;if(mode==='family'&&!wheelHeld()){const drift=(.12*TAU/members.length-.008)*dt/1000;phase+=drift;phaseTarget+=drift;}if(manualTurn&&Math.abs(phaseTarget-phase)<.002&&Math.abs(velocity)<.002)manualTurn=false;}}
   const completions=[];
   // Commit the new scene only when the outgoing product is fully covered.
@@ -380,11 +560,17 @@ function mountWheel(root,scope){
   {const a=advance(inspectionMix,inspectionTween,orbitTween?elapsed:dt);inspectionMix=a[0];inspectionTween=a[1];if(a[2])completions.push(a[2]);}
   if(storyTween&&(!smoke.busy||covered)){
    const transition=storyTween;
-   const [position,next,done]=advance(storyPosition,transition,family==='gummies'?elapsed:dt);
+   const [position,next,done]=advance(storyPosition,transition,dt);
    storyPosition=position;storyTween=next;
    if(done)completions.push(done);
    const handoff=family==='gummies'?gummyHandoff(position,transition,members.length):null;
-   const slot=handoff?members[handoff[1].alpha>=.5?handoff[1].index:handoff[0].index]:slotAt(position);
+   let slot=slotAt(position);
+   if(handoff&&transition){
+    const goingNext=transition.to>transition.from;
+    const destIdx=goingNext?handoff[1]:handoff[0];
+    const origIdx=goingNext?handoff[0]:handoff[1];
+    slot=members[destIdx.alpha>=.20?destIdx.index:origIdx.index];
+   }
    if(slot!==selected){selected=slot;describe(slot);}
   }
   if(mode==='story'&&!storyTween&&!smoke.busy&&!paused&&motion()&&!storyHeld&&!storyModelHeld&&!cinema.contains(document.activeElement)&&!$('.mood-cinema-information').open){storyElapsed+=dt;if(storyElapsed>=STORY_DWELL)shiftStory(1);}
@@ -428,7 +614,8 @@ function mountWheel(root,scope){
     const entry=entryFor(slot,true);
     p.effect=flavourSplash(entry);
     p.effectGrade=flavourMediaGrade(entry);
-    p.effectAlpha=p.alpha*focusAmount*(1-inspectionMix);
+    const splashSettle=clamp01(1-Math.abs(scene?.distance??0)/0.25);
+     p.effectAlpha=p.alpha*focusAmount*(1-inspectionMix)*splashSettle;
    }
    }else{
     const all=circlePlacement(slot,phase,w,h,time),index=members.indexOf(slot);
@@ -472,7 +659,7 @@ function mountWheel(root,scope){
    engine?.draw(placements,w,h,clip,allowCinemaMedia()&&['focus','story'].includes(mode));
   syncCinema();annotate();root.dataset.moodPhase=phase.toFixed(4);root.dataset.moodPose=pose.toFixed(4);root.dataset.moodFocus=focusAmount.toFixed(4);root.dataset.moodCollection=family||'';root.dataset.moodFamilyAmount=familyAmount.toFixed(4);root.dataset.moodSelection=selected<0?'':entryFor(selected,true).id;root.style.setProperty('--detail-progress',String(focusAmount));root.style.setProperty('--family-progress',String(familyAmount*(1-focusAmount)));root.dataset.moodCarton=carton.toFixed(4);root.dataset.moodUnroll=unroll.toFixed(4);root.dataset.moodFoil=foil.toFixed(4);root.dataset.inspectedPart=inspectNode||'';root.dataset.inspectAmount=inspectAmount.toFixed(4);root.style.setProperty('--inspect-copy-progress',String(clamp01((inspectAmount-.55)/.45)));syncFilm();completions.forEach(fn=>fn());if(completions.length)journeyUI();
   if(mode==='family'&&pendingSlot>=0&&autoHold>0){autoHold-=dt;if(autoHold<=0){const slot=pendingSlot;pendingSlot=-1;openProduct(slot,{rotate:false});}}
-  const settling=hover.some((v,i)=>Math.abs(v-Number(i===hovered))>.01);if(inspectionTween||storyTween||(mode==='story'&&!paused&&motion())||phaseTween||familyTween||focusTween||poseTween||foilTween||unrollTween||inspectTween||cartonTween||orbitTween||settling||autoHold>0||(motion()&&!paused&&!wheelHeld()&&['all','family'].includes(mode)))invalidate();else last=0;
+  const settling=hover.some((v,i)=>Math.abs(v-Number(i===hovered))>.01);if(activeTween||(mode==='story'&&!paused&&motion())||settling||autoHold>0||(motion()&&!paused&&!wheelHeld()&&['all','family'].includes(mode))){if(!scope.disposed)frame=requestAnimationFrame(tick);}else last=0;
  }
  function steer(delta,now,cancelAuto=true){if(!['all','family'].includes(mode)||(pendingSlot>=0&&!cancelAuto)||(!cancelAuto&&wheelHeld()))return;manualTurn=cancelAuto;const bounded=Math.max(-.22,Math.min(.22,delta));phaseTarget+=bounded;velocity=Math.max(-.7,Math.min(.7,bounded*18));lastSteer=now;if(!motion()||paused){phase=phaseTarget;velocity=0;manualTurn=false;}pendingSlot=-1;autoHold=0;invalidate();}
  scope.on(stage,'pointerdown',e=>{if(!['all','family'].includes(mode)||e.button!==0)return;const r=stage.getBoundingClientRect(),m=ringMetrics(w,h);wheelDrag={id:e.pointerId,x:e.clientX,y:e.clientY,angle:Math.atan2(e.clientY-r.top-m.y,e.clientX-r.left-m.x),moved:false};lastPointer=null;});
@@ -485,7 +672,9 @@ function mountWheel(root,scope){
  scope.on(stage,'wheel',e=>{if(!['all','family'].includes(mode)||(!e.shiftKey&&Math.abs(e.deltaX)<=Math.abs(e.deltaY)))return;e.preventDefault();steer((e.deltaX||e.deltaY)*.002,performance.now());},{passive:false});
  buttons.forEach((b,slot)=>{scope.on(b,'click',e=>{if(performance.now()<ignoreClickUntil)return;focusAfterOpen=e.detail===0;pointed=focused=-1;manualTurn=false;if(mode==='all')enterFamily(slot);else if(mode==='family')openProduct(slot);});scope.on(b,'pointerenter',e=>{if(!b.disabled&&e.pointerType==='mouse'){pointed=slot;manualTurn=false;updateHover();}});scope.on(b,'pointerleave',()=>{if(pointed===slot)pointed=-1;updateHover();});scope.on(b,'focus',()=>{if(!b.disabled&&b.matches(':focus-visible')){focused=slot;manualTurn=false;updateHover();}});scope.on(b,'blur',()=>{if(focused===slot)focused=-1;updateHover();});});
  scope.on(root,'keydown',e=>{if(mode==='story'&&['ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();shiftStory(e.key==='ArrowRight'?1:-1);return;}if(mode==='family'&&['ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();turnBelt(e.key==='ArrowRight'?1:-1);return;}if(mode==='detail'&&chapters.length&&['PageDown','PageUp'].includes(e.key)){e.preventDefault();stepChapter(e.key==='PageDown'?1:-1);}else if(e.key==='Escape'){e.preventDefault();if(inspectNode)clearInspection();else backOne();}else if(['all','family'].includes(mode)&&['ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();pendingSlot=-1;autoHold=0;manualTurn=true;phaseTarget+=(e.key==='ArrowRight'?1:-1)*TAU/(mode==='all'?16:Math.max(1,members.length));velocity=0;if(!motion()||paused){phase=phaseTarget;manualTurn=false;}lastSteer=performance.now();invalidate();}});
- scope.on($('[data-cinema-prev]'),'click',()=>shiftStory(-1));scope.on($('[data-cinema-next]'),'click',()=>shiftStory(1));scope.on($('[data-cinema-inside]'),'click',lookInside);scope.on($('[data-cinema-model]'),'click',lookInside);
+ scope.on($('[data-cinema-prev]'),'click',()=>shiftStory(-1));scope.on($('[data-cinema-next]'),'click',()=>shiftStory(1));scope.on($('[data-cinema-inside]'),'click',lookInside);
+ scope.on($('[data-cinema-model]'),'click',lookInside);
+ if(insideButton)scope.on(insideButton,'click',lookInside);
  scope.on(cinemaDots,'click',e=>{const b=e.target.closest('[data-cinema-index]');if(b)shiftStory(0,Number(b.dataset.cinemaIndex));});
  scope.on($('[data-belt-prev]'),'click',()=>turnBelt(-1));scope.on($('[data-belt-next]'),'click',()=>turnBelt(1));
  scope.on(cinemaCopy,'pointerenter',()=>storyHeld=true);scope.on(cinemaCopy,'pointerleave',()=>{storyHeld=false;invalidate();});scope.on(cinema,'focusout',()=>invalidate());
@@ -520,3 +709,4 @@ function mountWheel(root,scope){
  history.replaceState({...history.state,ehfWheel:true,ehfWheelLevel:Number(history.state?.ehfWheelLevel)||0},'',location.href);ui();measure();
  let interacted=false;scope.on(root,'pointerdown',()=>interacted=true,{once:true});requestAnimationFrame(()=>{if(scope.disposed)return;const u=new URL(location.href);if(!interacted&&(u.hash==='#collections'||(!u.hash&&u.searchParams.has('collection'))))root.scrollIntoView({block:'start',behavior:'instant'});const initial=root.dataset.initialCollection,legacy=u.searchParams.get('flavour');if(!u.searchParams.has('collection')&&(initial||legacy)){u.searchParams.set('collection',legacy?'vapes':initial);if(legacy&&moodProducts.some(p=>p.id===legacy)){u.searchParams.set('product',legacy);u.searchParams.delete('flavour');}history.replaceState(history.state,'',u);}if(u.searchParams.has('collection'))restoreRoute();});
 }
+

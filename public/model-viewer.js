@@ -1,4 +1,4 @@
-import {addSurfaceDetails} from './surface-details.js?v=4c7de86ff887';
+﻿import {addSurfaceDetails} from './surface-details.js?v=4c7de86ff887';
 import {createMaterialFinishes} from './material-finishes.js?v=d586bda1302e';
 import {createStudioLight} from './studio-light.js?v=7700b6f2c0ac';
 import {mountBarViewer} from './bar-viewer.js?v=834658f760e5';
@@ -8,7 +8,7 @@ const modelRevision='approved-range-20261112';
 export const chooseVariant=value=>findVariant(value).id;
 export function renderSize(width,height,dpr=1){const ratio=Math.min(Math.max(dpr,1.25),1.75,Math.sqrt(1600000/Math.max(1,width*height)));return {width:Math.max(1,Math.round(width*ratio)),height:Math.max(1,Math.round(height*ratio))};}
 export function initModelViewers(scope){
- document.querySelectorAll('[data-model-editor]:not([data-scene-managed])').forEach(root=>root.dataset.modelEditor==='vapes'?mountBarViewer(root,scope):mountEditor(root,scope));
+ document.querySelectorAll('[data-model-editor]:not([data-scene-managed])').forEach(root=>['vapes','pre-rolls'].includes(root.dataset.modelEditor)?mountBarViewer(root,scope):mountEditor(root,scope));
 }
 function mountEditor(root,scope){
  const kind=root.dataset.modelEditor,stage=root.querySelector('[data-model-stage]'),canvas=root.querySelector('canvas'),poster=root.querySelector('[data-model-poster]'),open=root.querySelector('[data-model-open]'),reset=root.querySelector('[data-model-reset]'),gesture=root.querySelector('[data-model-gesture]'),status=root.querySelector('[data-model-status]');
@@ -98,6 +98,28 @@ function mountEditor(root,scope){
  }
  root.querySelectorAll('[data-model-variant]').forEach(button=>scope.on(button,'click',()=>selectVariant(button.dataset.modelVariant)));
  if(kind==='vapes')scope.on(sceneRoot,'ehf-select-flavour',event=>selectVariant(event.detail.id));
+if(kind==='pre-rolls'){
+  const applyTubeColor = (event) => {
+    const hex = event.detail?.color || event.detail?.shade;
+    if(hex && model){
+      model.traverse(node => {
+        if(node.isMesh){
+          const mats = Array.isArray(node.material) ? node.material : [node.material];
+          for(const m of mats){
+            if(m && (m.name === 'Brass tube' || ['StorageTube','TubeCap','Brass storage','Brass lid'].includes(node.name || node.parent?.name))){
+              m.color.set(hex);
+              m.needsUpdate = true;
+            }
+          }
+        }
+      });
+      draw();
+    }
+  };
+  scope.on(root, 'ehf-select-flavour', applyTubeColor);
+  if(sceneRoot) scope.on(sceneRoot, 'ehf-select-flavour', applyTubeColor);
+  scope.on(document, 'ehf-select-flavour', applyTubeColor);
+}
  parts.forEach(button=>scope.on(button,'click',()=>{if(!ready)return;opened=true;pose(button.dataset.modelPart);}));
  scope.on(canvas,'pointerdown',e=>{if(e.button!==0)return;drag={x:e.clientX,y:e.clientY,rx:rotationX,ry:rotationY,moved:false};canvas.setPointerCapture(e.pointerId);signalMotion(true);});
  scope.on(canvas,'pointermove',e=>{if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;drag.moved=drag.moved||Math.abs(dx)+Math.abs(dy)>5;rotationY=clamp(drag.ry+dx*.008,-1.25,1.25);rotationX=clamp(drag.rx+dy*.005,-.4,.4);draw();});

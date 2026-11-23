@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 import {initEntrance} from './entrance.js?v=61114bfd923d';
 import {products,categories} from './catalogue.js?v=9ae734471d9d';
 import {initPlaylist} from './soundscape.js?v=f3cb54df834d';
@@ -7,13 +7,9 @@ import {initNavigation} from './navigation.js?v=46193e463fb2';
 // Only import route features when their surface exists.
 function loadFeature(scope,selector,load,entry){
  const roots=[...document.querySelectorAll(selector)];if(!roots.length||scope.disposed)return Promise.resolve();
- return load().then(module=>{if(!scope.disposed)module[entry](scope);}).catch(()=>{
+ return load().then(module=>{if(!scope.disposed)module[entry](scope);}).catch((err)=>{
+  console.warn('Feature load error for', entry, err);
   if(scope.disposed)return;roots.forEach(root=>root.dataset.featureError='true');
-  if(entry==='initMoodCircles')for(const root of roots){
-   const message=document.createElement('p');message.className='feature-recovery';message.setAttribute('role','status');
-   message.innerHTML='The interactive collection could not load. <a href="collection.html">Browse the collection</a> or <button type="button">reload this view</button>.';
-   scope.on(message.querySelector('button'),'click',()=>location.reload());root.append(message);
-  }
  });
 }
 function mountPage(){
@@ -97,7 +93,7 @@ loadFeature(scope,'.hero,[data-tilt],[data-explore-cursor],.product-gallery',()=
 
 const mountScenes=()=>{
 const wheel=$('[data-mood-circle]');
-const loadWheel=()=>loadFeature(scope,'[data-mood-circle]',()=>import('./mood-circle.js?v=b57e808fd94a'),'initMoodCircles');
+const loadWheel=()=>loadFeature(scope,'[data-mood-circle]',()=>import('./mood-circle.js?v=lookinside_mws9mecg' + Date.now()),'initMoodCircles');
 if(wheel){
  if(location.hash==='#collections'||wheel.dataset.initialCollection||new URLSearchParams(location.search).has('collection'))loadWheel();
  else{
@@ -113,7 +109,7 @@ const directScene=loadFeature(scope,'[data-collection-cinema],.flavour-page>[dat
 
 loadFeature(scope,'[data-edition-gallery],[data-legacy-vape-study]',()=>import('./edition-gallery.js?v=a7aace3187ee'),'initEditionGalleries');
 loadFeature(scope,'[data-range-scene]',()=>import('./premium-range.js?v=4380f0389aa9'),'initPremiumRanges');
-directScene.then(()=>loadFeature(scope,'[data-model-editor]:not([data-scene-managed])',()=>import('./model-viewer.js?v=d475b92616a3'),'initModelViewers'));
+directScene.then(()=>loadFeature(scope,'[data-model-editor]:not([data-scene-managed])',()=>import('./model-viewer.js?v=ring_mws7r9hl'),'initModelViewers'));
 loadFeature(scope,'[data-study]',()=>import('./studies.js?v=e31501e680f9'),'initProductStudies');
 loadFeature(scope,'[data-conveyor]',()=>import('./conveyor.js?v=155bee2c4a86'),'initConveyor');
 loadFeature(scope,'[data-product-story]',()=>import('./product-story.js?v=04481d9860a4'),'initProductStory');

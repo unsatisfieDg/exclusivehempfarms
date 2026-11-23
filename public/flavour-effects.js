@@ -1,4 +1,4 @@
-import {flavourSplashSource} from './flavour-cinema.js?v=f2b5910e3437';
+import {flavourSplashSource} from './flavour-cinema.js?v=bidirectional1795288957292';
 
 // Gummy splash plates, composited inside the existing 3D context.
 // Packed movies store RGB left / alpha right; a single decoder serves the active fruit.
@@ -82,10 +82,9 @@ export function createFlavourEffects(T,scene,scope,invalidate,video){
  function update(items,w,h,allow){
   running=allow;
   const wanted=items.filter(item=>item.effect&&item.effectAlpha>.008);
-  // Keep one decoder. Hand it over late in the slide while the matching still is visible.
+  // Keep one decoder. Hand it over immediately to the leading plate so gummies don't stall.
   const leading=wanted.reduce((best,item)=>!best||item.effectAlpha>best.effectAlpha?item:best,null);
-  const outgoing=wanted.find(item=>item.effect===active);
-  const id=(outgoing&&outgoing.effectAlpha>=leading.effectAlpha*.25?outgoing:leading)?.effect;
+  const id=leading?.effect;
   const nextSource=id?flavourSplashSource(id,w<700):null;
   if(nextSource!==source&&(!id||allow)){
    generation++;

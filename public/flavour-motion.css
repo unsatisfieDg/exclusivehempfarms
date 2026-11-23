@@ -21,7 +21,7 @@
 .product-reveal__controls{padding:7px 10px;gap:12px 22px;background:#f5f4eeed}
 .product-reveal__controls button{min-height:42px;padding-block:8px}
 .product-reveal__note{font-size:9px;margin:8px 0 0}
-.flavour-switch{grid-column:1/-1;display:flex;justify-content:center;align-items:center;gap:24px;position:relative;z-index:4;padding:12px 55px 2px;font:400 12px/1.4 var(--sans);color:#163125}
+.flavour-switch{grid-column:1/-1;display:flex;justify-content:center;align-items:center;flex-wrap:wrap;gap:8px 18px;position:relative;z-index:4;padding:12px 30px 2px;font:400 12px/1.4 var(--sans);color:#163125}
 .flavour-switch>[data-scene-flavour]{min-height:44px;padding:10px 0;border-bottom:1px solid transparent;transition:border-color .3s,color .3s}
 .flavour-switch>[aria-pressed=true]{border-bottom-color:#163125}
 .flavour-switch>[data-scene-flavour]:hover{border-bottom-color:#4d725a}

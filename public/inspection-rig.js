@@ -62,6 +62,8 @@ export function createPreRollStudy(T,brandMap=null,herbMap=null,paperMap=null,ca
  const spiralPath=new T.CatmullRomCurve3(spiral);filter.add(new T.Mesh(new T.TubeGeometry(spiralPath,150,.00013,4,false),tipMat));
  const seam=new T.Mesh(new T.CylinderGeometry(.000075,.000075,.085,5),tipMat);seam.name='Paper seam';seam.position.set(-.0002,.001,.0035);roll.add(seam);
  function apply(p,u=0){if(root.userData.open===p&&root.userData.unroll===u)return;const s=preRollMotion(p);tube.position.x=s.tubeX;cap.position.set(s.capX,s.capY,0);cap.rotation.y=s.capTurn;roll.position.set(s.rollX,s.rollY,0);
+  // Hide the roll (joint) when tube is closed so it cannot be seen through the open top
+  roll.visible=p>0.001;
   // Case travel changes transforms, not the paper mesh or 520 filling matrices.
   if(root.userData.unroll!==u){const unfurl=phase(u,0,.78),release=phase(u,.28,1);
   sheetGroup.position.set(-unfurl*.018,0,unfurl*.004);flower.position.set(release*.008,release*.007,release*.003);flower.visible=u>.001;for(let i=0;i<filling.length;i++){const f=filling[i];dummy.position.copy(f.closed).lerp(f.pile,release);dummy.rotation.copy(f.rotation);const size=f.scale*(1+release*1.7);dummy.scale.set(size,size*(.8+(i%5)*.07),size*(.65+(i%3)*.12));dummy.updateMatrix();leafBatches[f.batch].setMatrixAt(f.index,dummy.matrix);}for(const fragments of leafBatches){fragments.instanceMatrix.needsUpdate=true;fragments.computeBoundingBox();}filter.position.set(release*.018,-.0365-release*.010,release*.004);seam.visible=u<.02;

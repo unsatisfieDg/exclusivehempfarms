@@ -3,7 +3,7 @@ import {createMaterialFinishes} from './material-finishes.js?v=d586bda1302e';
 import {createStudioLight} from './studio-light.js?v=7700b6f2c0ac';
 import {findVariant,vapeVariants,VAPE_MODEL_REVISION} from './vape-variants.js?v=2aa87c105d21';
 import {descriptionPlacement} from './model-annotations.js?v=82d3cb5bb29f';
-import {productComponent} from './product-content.js?v=c73acc77c6a5';
+import {productComponent,approvedFlavours} from './product-content.js?v=c73acc77c6a5';
 const clamp=n=>Math.max(0,Math.min(1,n));
 const ease=n=>{n=clamp(n);return n*n*(3-2*n);};
 const phase=(p,a,b)=>ease((p-a)/(b-a));
@@ -22,7 +22,17 @@ export function mountBarViewer(root,scope){
  const sceneRoot=root.closest('[data-range-scene]'),stage=root.querySelector('[data-model-stage]'),canvas=root.querySelector('canvas'),poster=root.querySelector('[data-model-poster]'),open=root.querySelector('[data-model-open]'),reset=root.querySelector('[data-model-reset]'),tear=root.querySelector('[data-wrapper-open]'),gesture=root.querySelector('[data-model-gesture]'),status=root.querySelector('[data-model-status]'),parts=sceneRoot.querySelectorAll('[data-model-part]');
  const flow=root.hasAttribute('data-model-flow'),labels=[...root.querySelectorAll('[data-flow-label]')];let finishes,replayNext=null,atmosphere,ambientFrame=0,ambientLast=0,ambientTime=0,backgroundPaused=root.closest('[data-product-reveal]')?.dataset.scenePaused==='true';
  const markers=[...root.querySelectorAll('[data-model-marker]')],detail=root.querySelector('[data-model-detail]'),leader=root.querySelector('[data-model-detail-leader]'),annotated=root.hasAttribute('data-model-annotations');
- let selected=findVariant(root.dataset.initialFlavour||new URLSearchParams(location.search).get('flavour')).id;
+ const kind=root.dataset.modelEditor||'vapes';
+ const isPreRoll=kind==='pre-rolls';
+ const getFlavourColor=(id)=>{
+  if(isPreRoll){
+   const match=approvedFlavours.find(f=>f.id===id);
+   return match?match.shade:'#8c7a4a';
+  }
+  return findVariant(id).color;
+ };
+ let selected=isPreRoll?(root.dataset.initialFlavour||'granddaddy-purple'):findVariant(root.dataset.initialFlavour||new URLSearchParams(location.search).get('flavour')).id;
+ let activeFlavourColor=getFlavourColor(selected);
  let disposeStudio,THREE,loader,renderer,scene,camera,rig,model,moves=[],surfaces=[],morphs=[],manifest,request,engine;
  let ready=false,visible=false,loading=false,failed=false,epoch=0,frame=0,animation=null,opened=false,torn=false,progress=0,foil=0,view='set',part=null,rx=0,ry=.11,drag=null,target,goalTarget,goalPosition,eye,orbit;
  const reduced=matchMedia('(prefers-reduced-motion: reduce)'),motion=()=>!reduced.matches&&!document.body.classList.contains('motion-off');
@@ -37,7 +47,7 @@ export function mountBarViewer(root,scope){
    const retry=root.querySelector('[data-model-reset]');retry.hidden=!failed;retry.textContent=root.dataset.engineFailed==='true'||root.dataset.contextLost==='true'?'Reload 3D view':'Retry 3D view';
    open.hidden=failed;open.disabled=!ready||Boolean(animation);open.querySelector('b').textContent='Replay';
    root.querySelectorAll('[data-model-view]').forEach(b=>{b.setAttribute('aria-pressed',String(view===b.dataset.modelView));b.disabled=!ready||(b.dataset.modelView==='wrapper'&&!manifest?.tearTargets);});
-   poster.src=`assets/vape-range/${selected}-runway.webp?v=approved-range-20261112`;gesture.textContent=failed?'The product image is still available.':!ready?'Loading 3D...':'Drag to rotate';
+   if(isPreRoll){poster.src='assets/preroll-concept.webp';}else{poster.src=`assets/vape-range/${selected}-runway.webp?v=approved-range-20261112`;}gesture.textContent=failed?'The product image is still available.':!ready?'Loading 3D...':'Drag to rotate';
    return;
   }
   const v=findVariant(selected),bar=Boolean(manifest?.tearTargets);root.dataset.variant=selected;root.dataset.modelView=view;root.dataset.wrapperSupported=String(bar);root.dataset.wrapperState=torn?'open':'sealed';
@@ -59,6 +69,22 @@ export function mountBarViewer(root,scope){
   gesture.textContent=!ready?'Loading the 3D study…':annotated?'DRAG TO ROTATE / SELECT A MARKER':view==='wrapper'?'DRAG TO ROTATE / CLICK TO TEAR':'DRAG TO ROTATE / CLICK TO OPEN';
   sceneRoot.dispatchEvent(new CustomEvent('ehf-flavour-changed',{detail:{id:selected}}));
  }
+ 
+ function applyPreRollColor(hex){
+  if(!model||!isPreRoll||!hex)return;
+  model.traverse(node=>{
+   if(node.isMesh){
+    const mats=Array.isArray(node.material)?node.material:[node.material];
+    for(const m of mats){
+     if(m && (m.name==='Brass tube' || ['StorageTube','TubeCap','Brass storage','Brass lid'].includes(node.name||node.parent?.name))){
+      m.color.set(hex);
+      m.needsUpdate=true;
+     }
+    }
+   }
+  });
+ }
+
  function applyPose(p,w){
   for(const m of moves){const offset=manifest.tearTargets?barPartOffset(m.node.name,p,m.delta):m.delta.map(n=>n*ease(p));m.node.position.copy(m.base).add(new THREE.Vector3(...offset));}
   for(const n of morphs){const weights=foilMorphWeights(w,n.morphTargetInfluences.length);n.morphTargetInfluences.forEach((_,i)=>n.morphTargetInfluences[i]=weights[i]);}
@@ -113,30 +139,57 @@ export function mountBarViewer(root,scope){
   try{
    if(!engine)engine=(async()=>{const imports=await Promise.all([import('./vendor/three/three.module.min.js'),import('./vendor/three/addons/loaders/GLTFLoader.js')]);THREE=imports[0];if(scope.disposed)return;loader=new imports[1].GLTFLoader();renderer=new THREE.WebGLRenderer({canvas,alpha:true,antialias:true,powerPreference:'low-power'});renderer.setClearColor(0x000000,0);renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=.98;scene=new THREE.Scene();finishes=createMaterialFinishes(THREE,renderer);disposeStudio=createStudioLight(THREE,renderer,scene);rig=new THREE.Group();scene.add(rig);camera=new THREE.PerspectiveCamera(31,1,.001,10);target=new THREE.Vector3();eye=new THREE.Vector3();orbit=new THREE.Euler();scene.add(new THREE.HemisphereLight(0xf6f2e5,0x56645d,1));for(const [color,power,pos] of [[0xfff1da,2.2,[1,2,3]],[0xcbdfff,1.5,[-2,.6,1]],[0xffffff,1.6,[.5,1,-2]]]){const l=new THREE.DirectionalLight(color,power);l.position.set(...pos);scene.add(l);}})().catch(error=>{disposeStudio?.();finishes?.dispose();renderer?.dispose();renderer=null;scene=null;engine=null;root.dataset.engineFailed='true';throw error;});
    await engine;if(scope.disposed||mine!==epoch)return;
-   const revision=VAPE_MODEL_REVISION;const [response,meta]=await Promise.all([fetch(`assets/models/${selected}.glb?v=${revision}`,{signal:request.signal}),fetch(`assets/models/${selected}.json?v=${revision}`,{signal:request.signal}).then(r=>{if(!r.ok)throw Error('Missing model information');return r.json();})]);if(!response.ok)throw Error('Missing model');const gltf=await loader.parseAsync(await response.arrayBuffer(),'');
+   const revision=VAPE_MODEL_REVISION;const [response,meta]=await Promise.all([fetch(`assets/models/${isPreRoll?'pre-rolls':selected}.glb?v=${revision}`,{signal:request.signal}),fetch(`assets/models/${isPreRoll?'pre-rolls':selected}.json?v=${revision}`,{signal:request.signal}).then(r=>{if(!r.ok)throw Error('Missing model information');return r.json();})]);if(!response.ok)throw Error('Missing model');const gltf=await loader.parseAsync(await response.arrayBuffer(),'');
    if(scope.disposed||mine!==epoch){dispose(gltf.scene);return;}if(model){rig.remove(model);dispose(model);}model=gltf.scene;manifest=meta;rig.add(model);moves=Object.entries(meta.motion||{}).flatMap(([name,delta])=>{const node=model.getObjectByName(name);return node?[{node,base:node.position.clone(),delta}]:[];});surfaces=[];morphs=[];const replaced=new Set();
    model.traverse(node=>{if(!node.isMesh)return;const originals=Array.isArray(node.material)?node.material:[node.material],mats=originals.map(m=>{replaced.add(m);return finishes.finish(m);});node.material=Array.isArray(node.material)?mats:mats[0];for(const m of mats){if(m.map)m.map.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());m.userData.baseOpacity=m.opacity;m.userData.wasTransparent=m.transparent;m.forceSinglePass=true;m.userData.wasDepthWrite=m.depthWrite;}surfaces.push({node,materials:mats,component:component(node),alpha:1,from:1,to:1});if(node.morphTargetInfluences?.length){node.morphTargetInfluences.fill(0);morphs.push(node);}});replaced.forEach(m=>m.dispose());
    opened=false;torn=false;progress=foil=0;view=flow?'device':'set';part=null;rx=0;ry=.11;delete root.dataset.modelFocus;applyPose(0,0);if(flow)settleSurfaces();camera.aspect=stage.clientWidth/stage.clientHeight;camera.updateProjectionMatrix();aim();eye.copy(goalPosition);target.copy(goalTarget);
-   if(flow){atmosphere?.dispose();atmosphere=createLiquidAtmosphere(THREE,scene,findVariant(selected).color);}if(renderer.compileAsync)await renderer.compileAsync(scene,camera);if(scope.disposed||mine!==epoch)return;
+   if(flow){atmosphere?.dispose();atmosphere=createLiquidAtmosphere(THREE,scene,activeFlavourColor); if(goalTarget&&goalPosition) atmosphere.frame(goalTarget,goalPosition.distanceTo(goalTarget)); if(isPreRoll) applyPreRollColor(activeFlavourColor);}if(renderer.compileAsync)await renderer.compileAsync(scene,camera);if(scope.disposed||mine!==epoch)return;
    if(flow&&root.hasAttribute('data-wait-for-entrance'))atmosphere.setVisible(false);
-   ready=true;canvas.hidden=false;root.dataset.modelReady='true';root.dataset.modelState='assembled';info();resize();signal(false);status.textContent=`${findVariant(selected).name} 3D set ready.`;if(flow){root.dispatchEvent(new Event('ehf-model-ready'));if(!root.hasAttribute('data-wait-for-entrance'))startEntrance();}
+   ready=true;canvas.hidden=false;root.dataset.modelReady='true';root.dataset.modelState='assembled';info();resize();signal(false);status.textContent=`${isPreRoll?'Pre-rolls':findVariant(selected).name} 3D set ready.`;if(flow){root.dispatchEvent(new Event('ehf-model-ready'));if(!root.hasAttribute('data-wait-for-entrance'))startEntrance();}
   }catch(e){if(scope.disposed||mine!==epoch||e.name==='AbortError')return;failed=true;gesture.textContent='3D view could not load. Reset view to retry; the product image remains available.';status.textContent=gesture.textContent;root.dataset.modelReady='false';if(flow){info();root.dispatchEvent(new Event('ehf-model-failed'));}}
   finally{if(mine===epoch)loading=false;}
  }
  function startEntrance(){if(!ready)return;atmosphere?.setVisible(true);opened=true;transition({mode:'device',duration:2200});startAmbient();}
- function updateAtmosphere(seconds){atmosphere?.update(seconds);const panel=root.closest('[data-product-reveal]');if(panel){const wave=Math.sin(seconds*Math.PI/8);panel.style.setProperty('--splash-x',`${(wave*8).toFixed(2)}px`);panel.style.setProperty('--splash-y',`${(-wave*6).toFixed(2)}px`);panel.style.setProperty('--splash-angle',`${(wave*.65).toFixed(3)}deg`);}}
+ function updateAtmosphere(seconds){atmosphere?.update(seconds);const panel=root.closest('[data-product-reveal]')||sceneRoot;if(panel){const wave=Math.sin(seconds*Math.PI/8);panel.style.setProperty('--splash-x',`${(wave*8).toFixed(2)}px`);panel.style.setProperty('--splash-y',`${(-wave*6).toFixed(2)}px`);panel.style.setProperty('--splash-angle',`${(wave*.65).toFixed(3)}deg`);}}
  function startAmbient(){if(!flow||ambientFrame||scope.disposed||!visible||document.hidden||!motion()||backgroundPaused)return;ambientFrame=requestAnimationFrame(ambientTick);}
  function ambientTick(now){ambientFrame=0;if(scope.disposed||!visible||document.hidden||!motion()||backgroundPaused){ambientLast=0;return;}if(!ambientLast)ambientLast=now;const delta=Math.min(50,now-ambientLast);if(delta>=30){ambientLast=now;ambientTime+=delta/1000;updateAtmosphere(ambientTime);root.dataset.atmosphereTime=ambientTime.toFixed(3);if(!animation)draw();}ambientFrame=requestAnimationFrame(ambientTick);}
  scope.on(root,'ehf-scene-entered',startEntrance);scope.on(root,'ehf-scene-pause',e=>{backgroundPaused=e.detail.paused;if(backgroundPaused){cancelAnimationFrame(ambientFrame);ambientFrame=0;ambientLast=0;}else startAmbient();});
  scope.on(reduced,'change',()=>{startAmbient();if(!motion()){updateAtmosphere(0);draw();}});scope.own(new MutationObserver(()=>{startAmbient();if(!motion()){updateAtmosphere(0);draw();}})).observe(document.body,{attributes:true,attributeFilter:['class']});
  function toggleDevice(){opened=!opened;transition({mode:view==='wrapper'?'device':view});}
  function toggleWrapper(){if(!manifest?.tearTargets)return;torn=!torn;transition({mode:'wrapper',duration:2300});}
- function select(id){id=findVariant(id).id;if(id===selected){showStage();return;}selected=id;request?.abort();epoch++;loading=false;failed=false;cancelAnimationFrame(frame);animation=null;signal(false);showStage();boot();}
+ function select(id, colorOverride){
+  if(isPreRoll){
+   selected=id;
+   activeFlavourColor=colorOverride||getFlavourColor(id);
+   applyPreRollColor(activeFlavourColor);
+   if(atmosphere){
+    atmosphere.dispose();
+    atmosphere=createLiquidAtmosphere(THREE,scene,activeFlavourColor);
+    if(goalTarget && goalPosition) atmosphere.frame(goalTarget, goalPosition.distanceTo(goalTarget));
+   }
+   draw();
+   return;
+  }
+  id=findVariant(id).id;
+  if(id===selected){showStage();return;}
+  selected=id;
+  request?.abort();
+  epoch++;
+  loading=false;
+  failed=false;
+  cancelAnimationFrame(frame);
+  animation=null;
+  signal(false);
+  showStage();
+  boot();
+}
  function replay(){if(!ready||animation)return;const mode=view;const again=()=>{if(mode==='wrapper')torn=true;else opened=true;transition({mode,duration:mode==='wrapper'?2600:2400});};if(mode==='wrapper'?foil>.01:progress>.01){if(mode==='wrapper')torn=false;else opened=false;replayNext=again;transition({mode,duration:1100});}else again();}
  scope.on(open,'click',flow?replay:toggleDevice);scope.on(tear,'click',toggleWrapper);scope.on(reset,'click',()=>{if(failed){if(root.dataset.contextLost==='true'||root.dataset.engineFailed==='true'){location.reload();return;}failed=false;loading=false;boot();return;}rx=0;ry=.11;opened=torn=false;transition({mode:'set',duration:1500});});
  root.querySelectorAll('[data-model-view]').forEach(b=>scope.on(b,'click',()=>{replayNext=null;if(flow){if(b.dataset.modelView==='wrapper')torn=true;else opened=true;}transition({mode:b.dataset.modelView,duration:flow?2400:800});}));
  root.querySelectorAll('[data-model-variant]').forEach(b=>scope.on(b,'click',()=>select(b.dataset.modelVariant)));
- scope.on(sceneRoot,'ehf-select-flavour',e=>select(e.detail.id));
+ scope.on(sceneRoot,'ehf-select-flavour',e=>select(e.detail.id, e.detail.color||e.detail.shade));
+ scope.on(root,'ehf-select-flavour',e=>select(e.detail.id, e.detail.color||e.detail.shade));
+ scope.on(document,'ehf-select-flavour',e=>select(e.detail.id, e.detail.color||e.detail.shade));
  function inspect(name){if(!ready)return;const device=!['Packaging','Wrapper'].includes(name);if(device)opened=true;transition({focus:name,mode:device?'device':name==='Wrapper'?'wrapper':'set'});}
  parts.forEach(b=>scope.on(b,'click',()=>inspect(b.dataset.modelPart)));
  markers.forEach(b=>scope.on(b,'click',()=>inspect(b.dataset.modelMarker)));
